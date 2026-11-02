@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100vh;
+      background: #f9fafb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      overflow: hidden;
+      perspective: 900px;
+    }
+    .art-container {
+      width: 100%;
+      height: 100%;
+      padding: 8%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      pointer-events: none;
+      transition: transform 0.15s ease-out;
+    }
+    .art-wrap {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .art-wrap.pop-bounce {
+      transform: scale(1.05);
+    }
+    .art-wrap.mega-bounce {
+      transform: scale(1.09) rotate(2deg);
+    }
+    #art-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="art-container" id="art-box">
+    <div class="art-wrap" id="art-wrap">
+      <!-- Put your character PNG in the same GitHub repo as character.png, or keep the postimg link -->
+      <img id="art-img" src="character.png" />
+    </div>
+  </div>
+
+  <script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let ctx;
+    const artBox = document.getElementById('art-box');
+    const artWrap = document.getElementById('art-wrap');
+    const artImg = document.getElementById('art-img');
+
+    // Because character.png is hosted in the same GitHub repo, there is ZERO CORS block!
+    artImg.onload = function() {
+      if (artImg.dataset.trimmed) return;
+      try {
+        const c = document.createElement('canvas');
+        const cx = c.getContext('2d');
+        c.width = artImg.naturalWidth;
+        c.height = artImg.naturalHeight;
+        cx.drawImage(artImg, 0, 0);
+        const imgData = cx.getImageData(0, 0, c.width, c.height);
+        const d = imgData.data;
+
+        const corners = [
+          0,
+          (c.width - 1) * 4,
+          (c.height - 1) * c.width * 4,
+          ((c.height - 1) * c.width + (c.width - 1)) * 4
+        ];
+
+        const isBg = (i) => {
+          if (d[i + 3] < 35) return true;
+          if (d[i] > 240 && d[i + 1] > 240 && d[i + 2] > 240) return true;
+          for (const cIdx of corners) {
+            if (
+              Math.abs(d[i] - d[cIdx]) < 25 &&
+              Math.abs(d[i + 1] - d[cIdx + 1]) < 25 &&
+              Math.abs(d[i + 2] - d[cIdx + 2]) < 25 &&
+              Math.abs(d[i + 3] - d[cIdx + 3]) < 25
+            ) {
+              return true;
+            }
+          }
+          return false;
+        };
+
+        let top = c.height, left = c.width, right = 0, bottom = 0;
+        for (let y = 0; y < c.height; y++) {
+          for (let x = 0; x < c.width; x++) {
+            const idx = (y * c.width + x) * 4;
+            if (!isBg(idx)) {
+              if (x < left) left = x;
+              if (x > right) right = x;
+              if (y < top) top = y;
+              if (y > bottom) bottom = y;
+            }
+          }
+        }
+
+        if (right > left && bottom > top) {
+          const pad = 16;
+          const cropW = (right - left) + pad * 2;
+          const cropH = (bottom - top) + pad * 2;
+
+          const out = document.createElement('canvas');
+          out.width = cropW;
+          out.height = cropH;
+          const outCtx = out.getContext('2d');
+          outCtx.drawImage(c, left, top, right - left, bottom - top, pad, pad, right - left, bottom - top);
+
+          artImg.dataset.trimmed = 'true';
+          artImg.src = out.toDataURL();
+        }
+      } catch (err) {
+        console.log('Auto-trim error:', err);
+      }
+    };
+
+    window.addEventListener('pointermove', (e) => {
+      const xAxis = (window.innerWidth / 2 - e.clientX) / 42;
+      const yAxis = (e.clientY - window.innerHeight / 2) / 42;
+      artBox.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
+    });
+
+    window.addEventListener('pointerleave', () => {
+      artBox.style.transform = 'rotateY(0deg) rotateX(0deg)';
+    });
+
+    function playSoftClassicPopper() {
+      if (!ctx) ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const pitchShift = 0.92 + Math.random() * 0.16;
+
+      const popOsc = ctx.createOscillator();
+      const popGain = ctx.createGain();
+      popOsc.type = 'sine';
+      popOsc.frequency.setValueAtTime(210 * pitchShift, now);
+      popOsc.frequency.exponentialRampToValueAtTime(58 * pitchShift, now + 0.085);
+      popGain.gain.setValueAtTime(0.001, now);
+      popGain.gain.linearRampToValueAtTime(0.45, now + 0.006);
+      popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+      popOsc.connect(popGain);
+      popGain.connect(ctx.destination);
+      popOsc.start(now);
+      popOsc.stop(now + 0.09);
+
+      const puffLength = ctx.sampleRate * 0.14;
+      const puffBuffer = ctx.createBuffer(1, puffLength, ctx.sampleRate);
+      const puffData = puffBuffer.getChannelData(0);
+      for (let i = 0; i < puffLength; i++) {
+        puffData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.04));
+      }
+      const puffNoise = ctx.createBufferSource();
+      puffNoise.buffer = puffBuffer;
+      const puffFilter = ctx.createBiquadFilter();
+      puffFilter.type = 'bandpass';
+      puffFilter.frequency.setValueAtTime(850 * pitchShift, now);
+      puffFilter.Q.value = 0.7;
+      const puffGain = ctx.createGain();
+      puffGain.gain.setValueAtTime(0.3, now);
+      puffGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      puffNoise.connect(puffFilter);
+      puffFilter.connect(puffGain);
+      puffGain.connect(ctx.destination);
+      puffNoise.start(now);
+
+      const flutterLength = ctx.sampleRate * 0.28;
+      const flutterBuffer = ctx.createBuffer(1, flutterLength, ctx.sampleRate);
+      const flutterData = flutterBuffer.getChannelData(0);
+      for (let i = 0; i < flutterLength; i++) {
+        flutterData[i] = Math.random() > 0.82 ? (Math.random() * 2 - 1) : 0;
+      }
+      const flutterNoise = ctx.createBufferSource();
+      flutterNoise.buffer = flutterBuffer;
+      const flutterFilter = ctx.createBiquadFilter();
+      flutterFilter.type = 'bandpass';
+      flutterFilter.frequency.setValueAtTime(1600, now + 0.05);
+      flutterFilter.Q.value = 1.2;
+      const flutterGain = ctx.createGain();
+      flutterGain.gain.setValueAtTime(0.001, now);
+      flutterGain.gain.linearRampToValueAtTime(0.06, now + 0.07);
+      flutterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+      flutterNoise.connect(flutterFilter);
+      flutterFilter.connect(flutterGain);
+      flutterGain.connect(ctx.destination);
+      flutterNoise.start(now);
+    }
+
+    function playSecretComboSound() {
+      if (!ctx) ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+
+      [0, 0.11].forEach((delay, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(180 + idx * 35, now + delay);
+        osc.frequency.exponentialRampToValueAtTime(45, now + delay + 0.14);
+        gain.gain.setValueAtTime(0.001, now + delay);
+        gain.gain.linearRampToValueAtTime(0.5, now + delay + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.15);
+      });
+
+      const fanfareNotes = [261.63, 329.63, 392.00, 493.88, 587.33, 659.25, 783.99, 1046.50];
+      fanfareNotes.forEach((freq, i) => {
+        const delay = 0.06 + i * 0.055;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + delay);
+        gain.gain.setValueAtTime(0.0001, now + delay);
+        gain.gain.linearRampToValueAtTime(0.11, now + delay + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 1.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 1.55);
+      });
+
+      const fizzLength = ctx.sampleRate * 0.7;
+      const fizzBuffer = ctx.createBuffer(1, fizzLength, ctx.sampleRate);
+      const fizzData = fizzBuffer.getChannelData(0);
+      for (let i = 0; i < fizzLength; i++) {
+        fizzData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.25));
+      }
+      const fizzNoise = ctx.createBufferSource();
+      fizzNoise.buffer = fizzBuffer;
+      const fizzFilter = ctx.createBiquadFilter();
+      fizzFilter.type = 'bandpass';
+      fizzFilter.frequency.setValueAtTime(1200, now + 0.05);
+      fizzFilter.frequency.exponentialRampToValueAtTime(2400, now + 0.7);
+      fizzFilter.Q.value = 1.0;
+      const fizzGain = ctx.createGain();
+      fizzGain.gain.setValueAtTime(0.001, now);
+      fizzGain.gain.linearRampToValueAtTime(0.14, now + 0.08);
+      fizzGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+      fizzNoise.connect(fizzFilter);
+      fizzFilter.connect(fizzGain);
+      fizzGain.connect(ctx.destination);
+      fizzNoise.start(now);
+    }
+
+    let clickTimes = [];
+
+    window.addEventListener('pointerdown', (e) => {
+      const nowMs = Date.now();
+      clickTimes = clickTimes.filter(t => nowMs - t < 1800);
+      clickTimes.push(nowMs);
+
+      const x = e.clientX / window.innerWidth;
+      const y = e.clientY / window.innerHeight;
+
+      if (clickTimes.length >= 5) {
+        clickTimes = [];
+        playSecretComboSound();
+
+        artWrap.classList.remove('pop-bounce', 'mega-bounce');
+        void artWrap.offsetWidth;
+        artWrap.classList.add('mega-bounce');
+        setTimeout(() => artWrap.classList.remove('mega-bounce'), 320);
+
+        const goldColors = ['#FFD700', '#FFAA00', '#FFF4B8', '#FF6B8B', '#72EFDD'];
+        let customShapes = ['star', 'circle'];
+        if (typeof confetti.shapeFromText === 'function') {
+          customShapes.push(
+            confetti.shapeFromText({ text: '✨', scalar: 2 }),
+            confetti.shapeFromText({ text: '🎂', scalar: 2 }),
+            confetti.shapeFromText({ text: '👑', scalar: 2 })
+          );
+        }
+
+        confetti({
+          particleCount: 50,
+          angle: 60,
+          spread: 65,
+          startVelocity: 36,
+          gravity: 0.55,
+          scalar: 0.8,
+          ticks: 300,
+          shapes: customShapes,
+          colors: goldColors,
+          origin: { x: 0, y: 0.85 }
+        });
+        confetti({
+          particleCount: 50,
+          angle: 120,
+          spread: 65,
+          startVelocity: 36,
+          gravity: 0.55,
+          scalar: 0.8,
+          ticks: 300,
+          shapes: customShapes,
+          colors: goldColors,
+          origin: { x: 1, y: 0.85 }
+        });
+        confetti({
+          particleCount: 45,
+          spread: 110,
+          startVelocity: 28,
+          gravity: 0.5,
+          scalar: 0.85,
+          ticks: 300,
+          shapes: ['star'],
+          colors: goldColors,
+          origin: { x, y }
+        });
+      } else {
+        playSoftClassicPopper();
+
+        artWrap.classList.remove('pop-bounce');
+        void artWrap.offsetWidth;
+        artWrap.classList.add('pop-bounce');
+        setTimeout(() => artWrap.classList.remove('mega-bounce'), 180);
+
+        confetti({
+          particleCount: 80,
+          spread: 80,
+          startVelocity: 24,
+          gravity: 0.65,
+          scalar: 0.55,
+          ticks: 240,
+          origin: { x, y }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
