@@ -1,124 +1,85 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
   <style>
-    * { box-sizing: border-box; user-select: none; }
-    html, body {
-      margin: 0;
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    html,
+    body {
       width: 100%;
       height: 100vh;
-      background: #f9fafb;
+      margin: 0;
       display: flex;
-      justify-content: center;
       align-items: center;
-      cursor: pointer;
+      justify-content: center;
       overflow: hidden;
+      cursor: pointer;
       perspective: 900px;
+      background: #f9fafb;
     }
+
     .art-container {
       width: 100%;
       height: 100%;
       padding: 6%;
       display: flex;
-      justify-content: center;
       align-items: center;
+      justify-content: center;
       pointer-events: none;
       transition: transform 0.15s ease-out;
     }
+
     .art-wrap {
       width: 100%;
       height: 100%;
       display: flex;
-      justify-content: center;
       align-items: center;
+      justify-content: center;
       transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+
     .art-wrap.pop-bounce {
       transform: scale(1.05);
     }
+
     .art-wrap.mega-bounce {
       transform: scale(1.09) rotate(2deg);
     }
+
     #art-img {
       width: 100%;
       height: 100%;
-      object-fit: contain;
       display: block;
+      object-fit: contain;
     }
   </style>
 </head>
 <body>
-
   <div class="art-container" id="art-box">
     <div class="art-wrap" id="art-wrap">
-      <img id="art-img" src="character.png" />
+      <img id="art-img" src="character.png" alt="Character">
     </div>
   </div>
 
   <script>
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     let ctx;
+
     const artBox = document.getElementById('art-box');
     const artWrap = document.getElementById('art-wrap');
     const artImg = document.getElementById('art-img');
 
-    // Auto-crop around the character while ignoring the stray black dot on the far left
-    artImg.onload = function() {
-      if (artImg.dataset.trimmed) return;
-      try {
-        const c = document.createElement('canvas');
-        const cx = c.getContext('2d');
-        c.width = artImg.naturalWidth;
-        c.height = artImg.naturalHeight;
-        cx.drawImage(artImg, 0, 0);
-        const imgData = cx.getImageData(0, 0, c.width, c.height);
-        const d = imgData.data;
-
-        const isBg = (i) => {
-          if (d[i + 3] < 40) return true;
-          if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) return true;
-          return false;
-        };
-
-        const minX = Math.floor(c.width * 0.22);
-
-        let top = c.height, left = c.width, right = 0, bottom = 0;
-        for (let y = 0; y < c.height; y++) {
-          for (let x = minX; x < c.width; x++) {
-            const idx = (y * c.width + x) * 4;
-            if (!isBg(idx)) {
-              if (x < left) left = x;
-              if (x > right) right = x;
-              if (y < top) top = y;
-              if (y > bottom) bottom = y;
-            }
-          }
-        }
-
-        if (right > left && bottom > top) {
-          const pad = 18;
-          const cropW = (right - left) + pad * 2;
-          const cropH = (bottom - top) + pad * 2;
-
-          const out = document.createElement('canvas');
-          out.width = cropW;
-          out.height = cropH;
-          const outCtx = out.getContext('2d');
-          outCtx.drawImage(c, left, top, right - left, bottom - top, pad, pad, right - left, bottom - top);
-
-          artImg.dataset.trimmed = 'true';
-          artImg.src = out.toDataURL();
-        }
-      } catch (err) {
-        console.log('Auto-trim error:', err);
-      }
-    };
-
+    // Tilt the character slightly toward the pointer.
     window.addEventListener('pointermove', (e) => {
       const xAxis = (window.innerWidth / 2 - e.clientX) / 42;
       const yAxis = (e.clientY - window.innerHeight / 2) / 42;
+
       artBox.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
     });
 
@@ -129,58 +90,75 @@
     function playSoftClassicPopper() {
       if (!ctx) ctx = new AudioCtx();
       if (ctx.state === 'suspended') ctx.resume();
+
       const now = ctx.currentTime;
       const pitchShift = 0.92 + Math.random() * 0.16;
 
+      // Main pop tone.
       const popOsc = ctx.createOscillator();
       const popGain = ctx.createGain();
+
       popOsc.type = 'sine';
       popOsc.frequency.setValueAtTime(210 * pitchShift, now);
       popOsc.frequency.exponentialRampToValueAtTime(58 * pitchShift, now + 0.085);
+
       popGain.gain.setValueAtTime(0.001, now);
       popGain.gain.linearRampToValueAtTime(0.45, now + 0.006);
       popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
       popOsc.connect(popGain);
       popGain.connect(ctx.destination);
       popOsc.start(now);
       popOsc.stop(now + 0.09);
 
+      // Soft noise puff.
       const puffLength = ctx.sampleRate * 0.14;
       const puffBuffer = ctx.createBuffer(1, puffLength, ctx.sampleRate);
       const puffData = puffBuffer.getChannelData(0);
+
       for (let i = 0; i < puffLength; i++) {
         puffData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.04));
       }
+
       const puffNoise = ctx.createBufferSource();
-      puffNoise.buffer = puffBuffer;
       const puffFilter = ctx.createBiquadFilter();
+      const puffGain = ctx.createGain();
+
+      puffNoise.buffer = puffBuffer;
       puffFilter.type = 'bandpass';
       puffFilter.frequency.setValueAtTime(850 * pitchShift, now);
       puffFilter.Q.value = 0.7;
-      const puffGain = ctx.createGain();
+
       puffGain.gain.setValueAtTime(0.3, now);
       puffGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
       puffNoise.connect(puffFilter);
       puffFilter.connect(puffGain);
       puffGain.connect(ctx.destination);
       puffNoise.start(now);
 
+      // Light flutter sound.
       const flutterLength = ctx.sampleRate * 0.28;
       const flutterBuffer = ctx.createBuffer(1, flutterLength, ctx.sampleRate);
       const flutterData = flutterBuffer.getChannelData(0);
+
       for (let i = 0; i < flutterLength; i++) {
         flutterData[i] = Math.random() > 0.82 ? (Math.random() * 2 - 1) : 0;
       }
+
       const flutterNoise = ctx.createBufferSource();
-      flutterNoise.buffer = flutterBuffer;
       const flutterFilter = ctx.createBiquadFilter();
+      const flutterGain = ctx.createGain();
+
+      flutterNoise.buffer = flutterBuffer;
       flutterFilter.type = 'bandpass';
       flutterFilter.frequency.setValueAtTime(1600, now + 0.05);
       flutterFilter.Q.value = 1.2;
-      const flutterGain = ctx.createGain();
+
       flutterGain.gain.setValueAtTime(0.001, now);
       flutterGain.gain.linearRampToValueAtTime(0.06, now + 0.07);
       flutterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
       flutterNoise.connect(flutterFilter);
       flutterFilter.connect(flutterGain);
       flutterGain.connect(ctx.destination);
@@ -190,56 +168,75 @@
     function playSecretComboSound() {
       if (!ctx) ctx = new AudioCtx();
       if (ctx.state === 'suspended') ctx.resume();
+
       const now = ctx.currentTime;
 
+      // Two low impact sounds.
       [0, 0.11].forEach((delay, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
+
         osc.type = 'sine';
         osc.frequency.setValueAtTime(180 + idx * 35, now + delay);
         osc.frequency.exponentialRampToValueAtTime(45, now + delay + 0.14);
+
         gain.gain.setValueAtTime(0.001, now + delay);
         gain.gain.linearRampToValueAtTime(0.5, now + delay + 0.008);
         gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.14);
+
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(now + delay);
         osc.stop(now + delay + 0.15);
       });
 
-      const fanfareNotes = [261.63, 329.63, 392.00, 493.88, 587.33, 659.25, 783.99, 1046.50];
+      // Rising musical fanfare.
+      const fanfareNotes = [
+        261.63, 329.63, 392.00, 493.88,
+        587.33, 659.25, 783.99, 1046.50
+      ];
+
       fanfareNotes.forEach((freq, i) => {
         const delay = 0.06 + i * 0.055;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
+
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(freq, now + delay);
+
         gain.gain.setValueAtTime(0.0001, now + delay);
         gain.gain.linearRampToValueAtTime(0.11, now + delay + 0.025);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 1.5);
+
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(now + delay);
         osc.stop(now + delay + 1.55);
       });
 
+      // Fizz underneath the fanfare.
       const fizzLength = ctx.sampleRate * 0.7;
       const fizzBuffer = ctx.createBuffer(1, fizzLength, ctx.sampleRate);
       const fizzData = fizzBuffer.getChannelData(0);
+
       for (let i = 0; i < fizzLength; i++) {
         fizzData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.25));
       }
+
       const fizzNoise = ctx.createBufferSource();
-      fizzNoise.buffer = fizzBuffer;
       const fizzFilter = ctx.createBiquadFilter();
+      const fizzGain = ctx.createGain();
+
+      fizzNoise.buffer = fizzBuffer;
       fizzFilter.type = 'bandpass';
       fizzFilter.frequency.setValueAtTime(1200, now + 0.05);
       fizzFilter.frequency.exponentialRampToValueAtTime(2400, now + 0.7);
       fizzFilter.Q.value = 1.0;
-      const fizzGain = ctx.createGain();
+
       fizzGain.gain.setValueAtTime(0.001, now);
       fizzGain.gain.linearRampToValueAtTime(0.14, now + 0.08);
       fizzGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+
       fizzNoise.connect(fizzFilter);
       fizzFilter.connect(fizzGain);
       fizzGain.connect(ctx.destination);
@@ -256,15 +253,16 @@
 
     window.addEventListener('pointerdown', (e) => {
       const nowMs = Date.now();
-      // Increased time window to 3.2 seconds so 10 clicks is comfortably reachable without speed-running
-      clickTimes = clickTimes.filter(t => nowMs - t < 3200);
+
+      // Keep only clicks from the last 3.2 seconds.
+      clickTimes = clickTimes.filter((time) => nowMs - time < 3200);
       clickTimes.push(nowMs);
 
       const x = e.clientX / window.innerWidth;
       const y = e.clientY / window.innerHeight;
       const scaleFactor = getCharacterScale();
 
-      // Trigger secret combo after 10 rapid clicks!
+      // Secret combo: 10 clicks within 3.2 seconds.
       if (clickTimes.length >= 10) {
         clickTimes = [];
         playSecretComboSound();
@@ -275,7 +273,8 @@
         setTimeout(() => artWrap.classList.remove('mega-bounce'), 320);
 
         const goldColors = ['#FFD700', '#FFAA00', '#FFF4B8', '#FF6B8B', '#72EFDD'];
-        let customShapes = ['star', 'circle'];
+        const customShapes = ['star', 'circle'];
+
         if (typeof confetti.shapeFromText === 'function') {
           customShapes.push(
             confetti.shapeFromText({ text: '✨', scalar: 1.8 * scaleFactor }),
@@ -296,6 +295,7 @@
           colors: goldColors,
           origin: { x: 0, y: 0.85 }
         });
+
         confetti({
           particleCount: 50,
           angle: 120,
@@ -308,6 +308,7 @@
           colors: goldColors,
           origin: { x: 1, y: 0.85 }
         });
+
         confetti({
           particleCount: 45,
           spread: 110,
