@@ -20,7 +20,7 @@
     .art-container {
       width: 100%;
       height: 100%;
-      padding: 8%;
+      padding: 6%;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -53,7 +53,6 @@
 
   <div class="art-container" id="art-box">
     <div class="art-wrap" id="art-wrap">
-      <!-- Put your character PNG in the same GitHub repo as character.png, or keep the postimg link -->
       <img id="art-img" src="character.png" />
     </div>
   </div>
@@ -65,7 +64,7 @@
     const artWrap = document.getElementById('art-wrap');
     const artImg = document.getElementById('art-img');
 
-    // Because character.png is hosted in the same GitHub repo, there is ZERO CORS block!
+    // Auto-crop around the character while ignoring the stray black dot on the far left
     artImg.onload = function() {
       if (artImg.dataset.trimmed) return;
       try {
@@ -77,32 +76,17 @@
         const imgData = cx.getImageData(0, 0, c.width, c.height);
         const d = imgData.data;
 
-        const corners = [
-          0,
-          (c.width - 1) * 4,
-          (c.height - 1) * c.width * 4,
-          ((c.height - 1) * c.width + (c.width - 1)) * 4
-        ];
-
         const isBg = (i) => {
-          if (d[i + 3] < 35) return true;
-          if (d[i] > 240 && d[i + 1] > 240 && d[i + 2] > 240) return true;
-          for (const cIdx of corners) {
-            if (
-              Math.abs(d[i] - d[cIdx]) < 25 &&
-              Math.abs(d[i + 1] - d[cIdx + 1]) < 25 &&
-              Math.abs(d[i + 2] - d[cIdx + 2]) < 25 &&
-              Math.abs(d[i + 3] - d[cIdx + 3]) < 25
-            ) {
-              return true;
-            }
-          }
+          if (d[i + 3] < 40) return true;
+          if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) return true;
           return false;
         };
 
+        const minX = Math.floor(c.width * 0.22);
+
         let top = c.height, left = c.width, right = 0, bottom = 0;
         for (let y = 0; y < c.height; y++) {
-          for (let x = 0; x < c.width; x++) {
+          for (let x = minX; x < c.width; x++) {
             const idx = (y * c.width + x) * 4;
             if (!isBg(idx)) {
               if (x < left) left = x;
@@ -114,7 +98,7 @@
         }
 
         if (right > left && bottom > top) {
-          const pad = 16;
+          const pad = 18;
           const cropW = (right - left) + pad * 2;
           const cropH = (bottom - top) + pad * 2;
 
@@ -262,17 +246,26 @@
       fizzNoise.start(now);
     }
 
+    function getCharacterScale() {
+      const rect = artImg.getBoundingClientRect();
+      const charSize = Math.min(rect.width, rect.height) || Math.min(window.innerWidth, window.innerHeight);
+      return Math.max(0.35, Math.min(1.8, charSize / 420));
+    }
+
     let clickTimes = [];
 
     window.addEventListener('pointerdown', (e) => {
       const nowMs = Date.now();
-      clickTimes = clickTimes.filter(t => nowMs - t < 1800);
+      // Increased time window to 3.2 seconds so 10 clicks is comfortably reachable without speed-running
+      clickTimes = clickTimes.filter(t => nowMs - t < 3200);
       clickTimes.push(nowMs);
 
       const x = e.clientX / window.innerWidth;
       const y = e.clientY / window.innerHeight;
+      const scaleFactor = getCharacterScale();
 
-      if (clickTimes.length >= 5) {
+      // Trigger secret combo after 10 rapid clicks!
+      if (clickTimes.length >= 10) {
         clickTimes = [];
         playSecretComboSound();
 
@@ -285,9 +278,9 @@
         let customShapes = ['star', 'circle'];
         if (typeof confetti.shapeFromText === 'function') {
           customShapes.push(
-            confetti.shapeFromText({ text: '✨', scalar: 2 }),
-            confetti.shapeFromText({ text: '🎂', scalar: 2 }),
-            confetti.shapeFromText({ text: '👑', scalar: 2 })
+            confetti.shapeFromText({ text: '✨', scalar: 1.8 * scaleFactor }),
+            confetti.shapeFromText({ text: '🎂', scalar: 1.8 * scaleFactor }),
+            confetti.shapeFromText({ text: '👑', scalar: 1.8 * scaleFactor })
           );
         }
 
@@ -295,9 +288,9 @@
           particleCount: 50,
           angle: 60,
           spread: 65,
-          startVelocity: 36,
+          startVelocity: 34 * Math.sqrt(scaleFactor),
           gravity: 0.55,
-          scalar: 1,
+          scalar: 0.75 * scaleFactor,
           ticks: 300,
           shapes: customShapes,
           colors: goldColors,
@@ -307,9 +300,9 @@
           particleCount: 50,
           angle: 120,
           spread: 65,
-          startVelocity: 36,
+          startVelocity: 34 * Math.sqrt(scaleFactor),
           gravity: 0.55,
-          scalar: 1,
+          scalar: 0.75 * scaleFactor,
           ticks: 300,
           shapes: customShapes,
           colors: goldColors,
@@ -318,9 +311,9 @@
         confetti({
           particleCount: 45,
           spread: 110,
-          startVelocity: 28,
+          startVelocity: 26 * Math.sqrt(scaleFactor),
           gravity: 0.5,
-          scalar: 1,
+          scalar: 0.85 * scaleFactor,
           ticks: 300,
           shapes: ['star'],
           colors: goldColors,
@@ -332,14 +325,14 @@
         artWrap.classList.remove('pop-bounce');
         void artWrap.offsetWidth;
         artWrap.classList.add('pop-bounce');
-        setTimeout(() => artWrap.classList.remove('mega-bounce'), 180);
+        setTimeout(() => artWrap.classList.remove('pop-bounce'), 180);
 
         confetti({
-          particleCount: 80,
+          particleCount: 75,
           spread: 80,
-          startVelocity: 24,
+          startVelocity: 24 * Math.sqrt(scaleFactor),
           gravity: 0.65,
-          scalar: 1,
+          scalar: 0.55 * scaleFactor,
           ticks: 240,
           origin: { x, y }
         });
